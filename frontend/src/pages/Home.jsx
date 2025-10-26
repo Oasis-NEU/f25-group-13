@@ -5,7 +5,7 @@ function Home() {
   return (
     <div className="container mx-auto px-4 py-16">
       <motion.div
-        initial={{ opacity: 5, y: -20 }}
+        initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
         className="text-center mb-12"
@@ -14,14 +14,14 @@ function Home() {
           Vinyl Congregation
         </h1>
         <p className="text-xl text-gray-400 mb-8">
-          Discover your next favorite vinyl record from eBay's vast collection
+          Discover your next favorite vinyl records from eBay's vast collection
         </p>
       </motion.div>
       
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
+        transition={{ duration: 1.0, delay: 0.2 }}
       >
         <SearchBar />
       </motion.div>
