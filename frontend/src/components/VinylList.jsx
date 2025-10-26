@@ -1,4 +1,4 @@
-//import VinylCard from './VinylCard'
+import VinylCard from './VinylCard'
 
 function VinylList({ vinyls, loading }) {
   if (loading) {

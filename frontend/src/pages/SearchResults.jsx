@@ -1,14 +1,4 @@
-export default function SearchResults() {
-    return (
-      <div className="container mx-auto px-4 py-16">
-        <h1 className="text-4xl font-bold mb-8">Search Results</h1>
-        <p>Search results will appear here</p>
-      </div>
-    );
-  }
-
-/**
-  import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import SearchBar from '../components/SearchBar'
@@ -70,4 +60,3 @@ function SearchResults() {
 }
 
 export default SearchResults
-*/

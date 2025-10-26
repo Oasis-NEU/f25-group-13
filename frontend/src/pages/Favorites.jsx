@@ -49,18 +49,3 @@ function Favorites() {
 }
 
 export default Favorites
-
-
-
-
-/**export default function Favorites() {
-    return (
-      <div className="container mx-auto px-4 py-16">
-        <h1 className="text-4xl font-bold mb-8">Favorites</h1>
-        <p>Your favorite records will appear here</p>
-      </div>
-    );
-  }
-
-*/
-  

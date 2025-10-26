@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Home from './pages/Home'
-import SearchResults from './pages/SearchResults.jsx'
+import SearchResults from './pages/SearchResults'
 import VinylDetail from './pages/VinylDetail'
 import About from './pages/About'
 import Favorites from './pages/Favorites'

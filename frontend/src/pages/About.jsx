@@ -1,11 +1,11 @@
 import { motion } from 'framer-motion'
 
-export function About() {
+function About() {
   const teamMembers = [
-    { role: 'Frontend Developer', responsibilities: 'Component architecture, routing, state management' },
+    { role: 'Frontend Developer (React Lead)', responsibilities: 'Component architecture, routing, state management' },
     { role: 'Backend Developer', responsibilities: 'API integration, data handling, server endpoints' },
     { role: 'UI/UX Designer', responsibilities: 'Wireframes, responsive layouts, component styling' },
-    { role: 'Security Tester', responsibilities: 'Feature testing, integration testing, bug tracking' },
+    { role: 'CyberSec Tester', responsibilities: 'Feature testing, integration testing, bug tracking' },
   ]
   
   return (
@@ -15,13 +15,13 @@ export function About() {
         animate={{ opacity: 1, y: 0 }}
         className="max-w-4xl mx-auto"
       >
-        <h1 className="text-5xl font-bold mb-6 text-center">About Our website</h1>
+        <h1 className="text-5xl font-bold mb-6 text-center">About Vinyl Congregation</h1>
         
         <div className="card p-8 mb-8">
           <h2 className="text-2xl font-semibold mb-4">Our Mission</h2>
           <p className="text-gray-300 leading-relaxed mb-4">
-            Our creation is a modern web application designed to help vinyl/physical media enthusiasts discover 
-            and explore vinyl records from eBay's vast marketplace. We aggregate data from eBay's API 
+            Vinyl Congregation is a modern web application designed to lwk help vinyl enthusiasts discover 
+            and explore vinyl records from eBay's vast marketplace. We might js aggregate data from eBay's API 
             to provide a beautiful, streamlined interface for browsing and finding your next favorite record.
           </p>
           <p className="text-gray-300 leading-relaxed">
@@ -74,7 +74,7 @@ export function About() {
               <h3 className="font-semibold text-vinyl-gold mb-2">Deployment</h3>
               <ul className="text-gray-400 space-y-1 text-sm">
                 <li>• Vercel (Frontend)</li>
-                <li>• Render/AWS (Backend)</li>
+                <li>• Supabase (Backend)</li>
               </ul>
             </div>
           </div>
