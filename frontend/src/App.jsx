@@ -6,29 +6,31 @@ import { useEffect } from 'react'
 import { supabase } from './utils/supabase'
 
 function App() {
-  useEffect(() => {
-    // Test fetching listings
-    async function testConnection() {
-      const { data, error } = await supabase
-        .from('listings')
-        .select('*')
-        .limit(5)
-      
-      if (error) {
-        console.error('Error connecting to Supabase:', error)
-      } else {
-        console.log('Connected! Sample listings:', data)
-      }
-    }
-    
-    testConnection()
-  }, [])
+  const [count, setCount] = useState(0)
 
   return (
-    <div>
-      <h1>Testing Supabase Connection</h1>
-      <p>Check the console for results</p>
-    </div>
+    <>
+      <div>
+        <a href="https://vite.dev" target="_blank">
+          <img src={viteLogo} className="logo" alt="Vite logo" />
+        </a>
+        <a href="https://react.dev" target="_blank">
+          <img src={reactLogo} className="logo react" alt="React logo" />
+        </a>
+      </div>
+      <h1>Vite + React</h1>
+      <div className="card">
+        <button onClick={() => setCount((count) => count + 1)}>
+          count is {count}
+        </button>
+        <p>
+          Edit <code>src/App.jsx</code> and save to test HMR
+        </p>
+      </div>
+      <p className="read-the-docs">
+        Click on the Vite and React logos to learn more
+      </p>
+    </>
   )
 }
 
