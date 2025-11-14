@@ -4,6 +4,8 @@ import Genres from './pages/Genres'
 import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
 import './App.css'
+import { useEffect } from 'react'
+import { supabase } from './utils/supabase'
 
 function App() {
   return (
