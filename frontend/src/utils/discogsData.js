@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import Fuse from 'fuse.js';
 
 /**
  * Test function to check Supabase connection and table structure
@@ -92,7 +93,7 @@ export async function fetchDiscogsReleases(options = {}) {
           // Fetch identifier (Discogs link)
           const { data: identifiers } = await supabase
             .from('release_identifiers')
-            .select('external_url, source')
+            .select('external_url, external_id, source, metadata')
             .eq('r_id', release.r_id)
             .eq('source', 'discogs')
             .limit(1)
@@ -158,6 +159,50 @@ function transformReleaseData(release) {
     ? release.marketplace_listings[0] 
     : release.marketplace_listings;
 
+  // Extract external URL and ensure it's a web URL, not an API URL
+  let externalUrl = identifier?.external_url || null;
+  
+  // Validate and fix the URL if needed
+  if (externalUrl) {
+    // If URL contains 'api.discogs.com', convert it to web URL
+    if (externalUrl.includes('api.discogs.com')) {
+      console.warn(`⚠️ Found API URL in database, converting to web URL: ${externalUrl}`);
+      // Extract release ID from API URL and convert to web URL
+      const releaseIdMatch = externalUrl.match(/releases\/(\d+)/);
+      if (releaseIdMatch) {
+        externalUrl = `https://www.discogs.com/release/${releaseIdMatch[1]}`;
+        console.log(`✅ Converted to web URL: ${externalUrl}`);
+      }
+    }
+    
+    // Ensure it's a valid Discogs web URL format
+    if (!externalUrl.match(/^https:\/\/www\.discogs\.com\/release\/\d+/)) {
+      console.warn(`⚠️ Invalid Discogs URL format: ${externalUrl}`);
+      externalUrl = null; // Reset if invalid format
+    }
+  }
+  
+  // If we have an external_id but no valid external_url, construct it
+  if (!externalUrl && identifier?.external_id) {
+    externalUrl = `https://www.discogs.com/release/${identifier.external_id}`;
+    console.log(`✅ Constructed URL from external_id: ${externalUrl}`);
+  }
+  
+  // Fallback: try to get discogs ID from metadata
+  if (!externalUrl && identifier?.metadata?.api_url) {
+    const releaseIdMatch = identifier.metadata.api_url.match(/releases\/(\d+)/);
+    if (releaseIdMatch) {
+      externalUrl = `https://www.discogs.com/release/${releaseIdMatch[1]}`;
+      console.log(`✅ Constructed URL from metadata: ${externalUrl}`);
+    }
+  }
+  
+  // Final validation: ensure URL is properly formatted
+  if (externalUrl && !externalUrl.startsWith('https://www.discogs.com/release/')) {
+    console.error(`❌ Invalid URL format: ${externalUrl}`);
+    externalUrl = null;
+  }
+
   return {
     id: release.r_id,
     title: release.title || 'Unknown Title',
@@ -168,7 +213,7 @@ function transformReleaseData(release) {
     // Image from releases.image (populated from release.thumb or release.cover_image)
     imageUrl: release.image || null,
     // External URL from release_identifiers.external_url (Discogs release page)
-    externalUrl: identifier?.external_url || null,
+    externalUrl: externalUrl,
     externalSource: 'discogs',
     genre: release.genre || null,
     releaseYear: release.release_year || null,
@@ -180,18 +225,19 @@ function transformReleaseData(release) {
 }
 
 /**
- * Search releases by title or artist
+ * Search releases by title or artist using fuzzy search
+ * Uses Fuse.js for typo-tolerant matching
  */
 export async function searchReleases(searchTerm, limit = 20) {
   try {
+    // Fetch a larger set of releases to search through (fuzzy search will filter)
     const { data, error } = await supabase
       .from('releases')
       .select('r_id, title, artist, genre, image, price, release_year')
-      .or(`title.ilike.%${searchTerm}%,artist.ilike.%${searchTerm}%`)
-      .limit(limit);
+      .limit(500); // Fetch more records for fuzzy search to work on
 
     if (error) {
-      console.error('Error searching releases:', error);
+      console.error('Error fetching releases:', error);
       return { data: null, error };
     }
 
@@ -199,27 +245,89 @@ export async function searchReleases(searchTerm, limit = 20) {
       return { data: [], error: null };
     }
 
-    // Fetch identifiers and marketplace data separately
+    // Configure Fuse.js for fuzzy search
+    const fuseOptions = {
+      keys: [
+        { name: 'title', weight: 0.6 }, // Title is slightly more important
+        { name: 'artist', weight: 0.4 }
+      ],
+      threshold: 0.5, // 0.0 = exact match, 1.0 = match anything (lower = stricter) - increased for more lenient matching
+      includeScore: true, // Include relevance score
+      minMatchCharLength: 1, // Minimum characters to match - reduced to 1
+      ignoreLocation: true, // Don't care about where in the string the match is
+      findAllMatches: true, // Find all matches, not just the first
+      shouldSort: true, // Sort results by score
+    };
+
+    // Create Fuse instance and search
+    const fuse = new Fuse(data, fuseOptions);
+    const searchResults = fuse.search(searchTerm);
+
+    // Get top results (limited by limit parameter)
+    const topResults = searchResults
+      .slice(0, limit)
+      .map(result => result.item);
+
+    if (topResults.length === 0) {
+      return { data: [], error: null };
+    }
+
+    // Fetch identifiers and marketplace data separately for matched results
     const releasesWithData = await Promise.all(
-      data.map(async (release) => {
-        const { data: identifiers } = await supabase
-          .from('release_identifiers')
-          .select('external_url, source')
-          .eq('r_id', release.r_id)
-          .eq('source', 'discogs')
-          .limit(1)
-          .single();
+      topResults.map(async (release) => {
+        let identifier = null;
+        let listing = null;
+
+        try {
+          const { data: identifiers } = await supabase
+            .from('release_identifiers')
+            .select('external_url, external_id, source, metadata')
+            .eq('r_id', release.r_id)
+            .eq('source', 'discogs')
+            .limit(1)
+            .maybeSingle();
+          
+          identifier = identifiers;
+        } catch (err) {
+          // Ignore errors fetching identifiers
+        }
+
+        try {
+          const { data: marketplaceData } = await supabase
+            .from('marketplace_listings')
+            .select('price, currency, is_available, quantity')
+            .eq('r_id', release.r_id)
+            .limit(1)
+            .maybeSingle();
+          
+          listing = marketplaceData;
+        } catch (err) {
+          // Ignore errors fetching marketplace data
+        }
 
         return {
           ...release,
-          release_identifiers: identifiers ? [identifiers] : [],
-          marketplace_listings: []
+          release_identifiers: identifier ? [identifier] : [],
+          marketplace_listings: listing ? [listing] : []
         };
       })
     );
 
     const transformedData = releasesWithData.map(release => transformReleaseData(release));
-    return { data: transformedData, error: null };
+    
+    // Deduplicate by title and artist (case-insensitive)
+    const uniqueResults = [];
+    const seen = new Set();
+    
+    transformedData.forEach(vinyl => {
+      const key = `${vinyl.title?.toLowerCase().trim()}_${vinyl.artist?.toLowerCase().trim()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueResults.push(vinyl);
+      }
+    });
+    
+    return { data: uniqueResults, error: null };
   } catch (err) {
     console.error('Error:', err);
     return { data: null, error: err };
@@ -242,17 +350,7 @@ export async function fetchReleaseById(r_id) {
         price,
         release_year,
         record_label,
-        format,
-        release_identifiers (
-          external_url,
-          source
-        ),
-        marketplace_listings (
-          price,
-          currency,
-          is_available,
-          quantity
-        )
+        format
       `)
       .eq('r_id', r_id)
       .single();
@@ -262,17 +360,60 @@ export async function fetchReleaseById(r_id) {
       return { data: null, error };
     }
 
-    // Check if it's a Discogs release
-    const identifiers = Array.isArray(data.release_identifiers) 
-      ? data.release_identifiers 
-      : data.release_identifiers ? [data.release_identifiers] : [];
-    const isDiscogs = identifiers.some(id => id?.source === 'discogs');
-    
-    if (!isDiscogs) {
-      return { data: null, error: { message: 'Release not found or not a Discogs release' } };
+    if (!data) {
+      return { data: null, error: { message: 'Release not found' } };
     }
 
-    return { data: transformReleaseData(data), error: null };
+    // Fetch identifiers and marketplace data separately
+    let identifier = null;
+    let listing = null;
+
+    try {
+      const { data: identifiers, error: identifierError } = await supabase
+        .from('release_identifiers')
+        .select('external_url, external_id, source, metadata')
+        .eq('r_id', r_id)
+        .eq('source', 'discogs')
+        .limit(1)
+        .maybeSingle();
+      
+      if (identifierError) {
+        console.error('Error fetching identifier:', identifierError);
+      } else {
+        identifier = identifiers;
+        console.log(`✅ Fetched identifier for release ${r_id}:`, {
+          external_url: identifiers?.external_url,
+          external_id: identifiers?.external_id,
+          isApiUrl: identifiers?.external_url?.includes('api.discogs.com')
+        });
+      }
+    } catch (err) {
+      console.error('Exception fetching identifier for release', r_id, err);
+    }
+
+    try {
+      const { data: marketplaceData } = await supabase
+        .from('marketplace_listings')
+        .select('price, currency, is_available, quantity')
+        .eq('r_id', r_id)
+        .limit(1)
+        .maybeSingle();
+      
+      listing = marketplaceData;
+    } catch (err) {
+      console.log('Could not fetch marketplace listing for release', r_id);
+    }
+
+    const releaseWithData = {
+      ...data,
+      release_identifiers: identifier ? [identifier] : [],
+      marketplace_listings: listing ? [listing] : []
+    };
+
+    const transformed = transformReleaseData(releaseWithData);
+    console.log(`✅ Transformed release ${r_id}, externalUrl:`, transformed.externalUrl);
+    
+    return { data: transformed, error: null };
   } catch (err) {
     console.error('Error:', err);
     return { data: null, error: err };
