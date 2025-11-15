@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { fetchDiscogsReleases, searchReleases } from '../utils/discogsData';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { fetchDiscogsReleases } from '../utils/discogsData';
 import './LandingPage.css';
 
 function LandingPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [isScrolled, setIsScrolled] = useState(false);
@@ -100,36 +103,14 @@ function LandingPage() {
     fetchVinylsOfTheDay();
   }, []);
 
-  // Handle search
-  const handleSearch = async (e) => {
+  // Handle search - navigate to search results page
+  const handleSearch = (e) => {
     e.preventDefault();
     if (!searchQuery.trim()) {
       return;
     }
-    try {
-      setLoading(true);
-      console.log('Searching Discogs releases for:', searchQuery);
-      const { data, error } = await searchReleases(searchQuery, 20);
-      if (error) {
-        console.error('Search error:', error);
-        alert('Search failed. Please try again.');
-      } else if (data && data.length > 0) {
-        console.log('Found', data.length, 'results');
-        setVinylsOfTheDay(data);
-        setError(null);
-        // Scroll to vinyls section
-        window.scrollTo({ top: window.innerHeight, behavior: 'smooth' });
-      } else {
-        console.log('No results found');
-        setError(`No results found for: "${searchQuery}"`);
-        setVinylsOfTheDay([]);
-      }
-    } catch (err) {
-      console.error('Search error:', err);
-      alert('Search failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    // Navigate to search results page with query parameter
+    navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
   };
 
   return (
@@ -142,12 +123,15 @@ function LandingPage() {
               <h1 className="brand-logo">Groove Scout</h1>
             </Link>
           </div>
-          <div className="nav-center">
-            <Link to="/genres" className="nav-link">Genres</Link>
-          </div>
           <div className="nav-right">
-            <Link to="/signin" className="btn-sign-in">Sign In</Link>
-            <Link to="/signup" className="btn-sign-up">Sign Up</Link>
+            {user ? (
+              <Link to="/account" className="btn-sign-up">Account</Link>
+            ) : (
+              <>
+                <Link to="/signin" className="btn-sign-in">Sign In</Link>
+                <Link to="/signup" className="btn-sign-up">Sign Up</Link>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -219,7 +203,12 @@ function LandingPage() {
           ) : (
             <div className="vinyls-grid">
               {vinylsOfTheDay.map((vinyl) => (
-                <div key={vinyl.id} className="vinyl-card">
+                <div 
+                  key={vinyl.id} 
+                  className="vinyl-card"
+                  onClick={() => navigate(`/vinyl/${vinyl.id}`)}
+                  style={{ cursor: 'pointer' }}
+                >
                   <div className="vinyl-image">
                     {vinyl.imageUrl ? (
                       <img src={vinyl.imageUrl} alt={`${vinyl.artist} - ${vinyl.title}`} />
@@ -238,25 +227,20 @@ function LandingPage() {
                     {vinyl.releaseYear && (
                       <p className="vinyl-year">{vinyl.releaseYear}</p>
                     )}
-                    {vinyl.price ? (
-                      <p className="vinyl-price">
-                        {vinyl.currency || '$'}{vinyl.price.toFixed(2)}
-                      </p>
-                    ) : (
-                      <p className="vinyl-price-unavailable">Price not available</p>
-                    )}
-                    {vinyl.externalUrl ? (
-                      <a 
-                        href={vinyl.externalUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="vinyl-link"
-                      >
-                        View on Discogs
-                      </a>
-                    ) : (
-                      <span className="vinyl-link-disabled">No listing available</span>
-                    )}
+                    <div className="vinyl-link" onClick={(e) => e.stopPropagation()}>
+                      {vinyl.externalUrl ? (
+                        <a 
+                          href={vinyl.externalUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="vinyl-link-button"
+                        >
+                          View on Discogs
+                        </a>
+                      ) : (
+                        <span className="vinyl-link-disabled">No listing available</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
