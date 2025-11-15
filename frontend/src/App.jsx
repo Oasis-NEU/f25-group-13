@@ -6,6 +6,8 @@ import Account from './pages/Account'
 import SearchResults from './pages/SearchResults'
 import VinylDetail from './pages/VinylDetail'
 import './App.css'
+import { useEffect } from 'react'
+import { supabase } from './utils/supabase'
 
 function App() {
   return (
