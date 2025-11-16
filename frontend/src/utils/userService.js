@@ -16,126 +16,90 @@ async function hashPassword(password) {
  * Create a new user in the users table
  * This works alongside Supabase Auth
  */
+
 export async function createUser(userData) {
   try {
-    const { email, full_name, password, authUserId } = userData;
-    
-    console.log('🔄 Starting user creation process...');
-    
-    // First, sign up with Supabase Auth (handles password hashing)
+    const { email, password, full_name } = userData;
+    console.log('🔄 Starting user creation process for:', email);
+
+    // 1. First create auth user
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          full_name,
-        },
+        data: { full_name },
+        emailRedirectTo: window.location.origin + '/account',
       },
     });
+
+    console.log('Auth response:', { authData, authError });
 
     if (authError) {
       console.error('❌ Auth signup error:', authError);
       return { data: null, error: authError };
     }
 
-    if (!authData.user) {
-      console.error('❌ No user returned from auth signup');
-      return { data: null, error: { message: 'User creation failed - no user returned' } };
-    }
-
-    const userId = authUserId || authData.user.id;
-    console.log('✅ Auth user created with ID:', userId);
-
-    // Wait a moment to ensure auth user is fully created
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Then, insert into existing users table
-    // Try to match existing table structure - adapt based on what columns exist
-    const userRecord = {
-      id: userId, // Primary key - matches auth.users.id
-      email: email,
-      username: full_name || email.split('@')[0], // Use username column if it exists
-      created_at: new Date().toISOString(),
-    };
-
-    // Add optional fields if they exist in the table
-    if (full_name) {
-      userRecord.full_name = full_name;
-    }
-
-    console.log('🔄 Attempting to insert user record into users table:', userRecord);
-
-    // Try to insert with retry logic
-    let insertAttempts = 0;
-    const maxAttempts = 3;
-    let insertError = null;
-    let insertData = null;
-
-    while (insertAttempts < maxAttempts) {
-      const { data, error } = await supabase
+    // 2. If we have a user, create profile in public.users
+    if (authData?.user) {
+      console.log('✅ Auth user created, creating profile...');
+      
+      // Generate a username from email (you might want to make this more robust)
+      const username = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
+      
+      const { data: profileData, error: profileError } = await supabase
         .from('users')
-        .insert(userRecord)
+        .insert([{
+          id: authData.user.id,
+          email: email,
+          username: username,
+          full_name: full_name,
+          created_at: new Date().toISOString()
+        }])
         .select()
         .single();
 
-      if (!error) {
-        insertData = data;
-        insertError = null;
-        break;
-      }
+      console.log('Profile creation response:', { profileData, profileError });
 
-      insertError = error;
-      insertAttempts++;
-
-      // If user already exists, that's fine - fetch existing
-      if (error.code === '23505') {
-        console.log('ℹ️ User already exists in users table, fetching existing record...');
-        const { data: existingUser } = await getUserById(userId);
-        if (existingUser) {
-          insertData = existingUser;
-          insertError = null;
-          break;
+      if (profileError) {
+        console.error('❌ Profile creation error:', profileError);
+        
+        // If the profile already exists, fetch it instead
+        if (profileError.code === '23505') { // Unique violation
+          console.log('ℹ️ Profile already exists, fetching...');
+          const { data: existingProfile } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', authData.user.id)
+            .single();
+            
+          if (existingProfile) {
+            console.log('✅ Found existing profile');
+            return { 
+              data: { 
+                user: authData.user, 
+                profile: existingProfile,
+                requiresConfirmation: !authData.user.confirmed_at 
+              }, 
+              error: null 
+            };
+          }
         }
+        return { data: null, error: profileError };
       }
 
-      // Wait before retry
-      if (insertAttempts < maxAttempts) {
-        console.log(`⏳ Retry ${insertAttempts}/${maxAttempts - 1} after error...`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
+      console.log('✅ Profile created successfully');
+      return { 
+        data: { 
+          user: authData.user, 
+          profile: profileData,
+          requiresConfirmation: !authData.user.confirmed_at 
+        }, 
+        error: null 
+      };
     }
 
-    if (insertError) {
-      // Check for common issues and provide helpful feedback
-      if (insertError.code === '42501') {
-        console.error('❌ Permission denied: RLS policy preventing insert into users table');
-        console.error('Error details:', insertError.message);
-        console.error('💡 Solution: Check Row Level Security policies on users table in Supabase');
-        console.error('💡 You may need to add an INSERT policy that allows authenticated users to insert their own record');
-      } else if (insertError.code === '42703') {
-        console.error('❌ Column does not exist: Check the users table schema');
-        console.error('Error details:', insertError.message);
-        console.error('💡 Expected columns: id, email, username (or full_name), created_at');
-      } else {
-        console.error('❌ Error creating user in users table after', maxAttempts, 'attempts:');
-        console.error('Error code:', insertError.code);
-        console.error('Error message:', insertError.message);
-        console.error('Full error:', JSON.stringify(insertError, null, 2));
-      }
-      
-      // Even if insert fails, return auth data - authentication still works
-      // The database trigger (if set up) will create the record
-      console.warn('⚠️ Continuing despite users table insert failure - auth user created successfully');
-      return { data: authData, error: null, warning: 'User created in auth but not in users table. Check RLS policies.' };
-    }
+    return { data: null, error: new Error('No user data returned from auth') };
 
-    if (insertData) {
-      console.log('✅ User successfully created in users table:', insertData);
-      return { data: { ...insertData, authData }, error: null };
-    }
-
-    // Fallback: return auth data
-    return { data: authData, error: null };
   } catch (err) {
     console.error('❌ Exception in createUser:', err);
     return { data: null, error: err };
