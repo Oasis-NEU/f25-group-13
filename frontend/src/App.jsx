@@ -5,6 +5,9 @@ import SignUp from './pages/SignUp'
 import Account from './pages/Account'
 import SearchResults from './pages/SearchResults'
 import VinylDetail from './pages/VinylDetail'
+import Favorites from './pages/Favorites'
+import Listings from './pages/Listings'
+import CreateListing from './pages/CreateListing'
 import './App.css'
 import { useEffect } from 'react'
 import { supabase } from './utils/supabase'
@@ -19,6 +22,9 @@ function App() {
         <Route path="/account" element={<Account />} />
         <Route path="/search" element={<SearchResults />} />
         <Route path="/vinyl/:id" element={<VinylDetail />} />
+        <Route path="/favorites" element={<Favorites />} />
+        <Route path="/listings" element={<Listings />} />
+        <Route path="/listings/create" element={<CreateListing />} />
       </Routes>
       </div>
   )

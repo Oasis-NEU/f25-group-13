@@ -139,11 +139,6 @@ function SignUp() {
                 required
               />
             </div>
-            <div className="form-options">
-              <label className="terms-checkbox">
-                <input type="checkbox" required /> I agree to the Terms of Service
-              </label>
-            </div>
             <button type="submit" className="submit-button" disabled={loading}>
               {loading ? 'Signing Up...' : 'Sign Up'}
             </button>

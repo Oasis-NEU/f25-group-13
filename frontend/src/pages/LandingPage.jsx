@@ -85,7 +85,17 @@ function LandingPage() {
           setVinylsOfTheDay([]);
         } else if (data && data.length > 0) {
           console.log('✅ Successfully fetched Discogs releases from Supabase:', data.length, 'records');
-          setVinylsOfTheDay(data);
+          // Deduplicate by normalized title+artist
+          const unique = [];
+          const seen = new Set();
+          for (const v of data) {
+            const key = `${(v.title || '').toLowerCase().trim()}__${(v.artist || '').toLowerCase().trim()}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              unique.push(v);
+            }
+          }
+          setVinylsOfTheDay(unique);
         } else {
           console.log('ℹ️  No Discogs releases found in database.');
           console.log('   Run node-populate-schema.js to populate your database with Discogs data');
@@ -125,7 +135,11 @@ function LandingPage() {
           </div>
           <div className="nav-right">
             {user ? (
-              <Link to="/account" className="btn-sign-up">Account</Link>
+              <>
+                <Link to="/listings" className="btn-sign-in">Listings</Link>
+                <Link to="/favorites" className="btn-sign-in">Favorites</Link>
+                <Link to="/account" className="btn-sign-up">Account</Link>
+              </>
             ) : (
               <>
                 <Link to="/signin" className="btn-sign-in">Sign In</Link>
