@@ -245,6 +245,37 @@ export async function searchReleases(searchTerm, limit = 20) {
       return { data: [], error: null };
     }
 
+    // Additionally fetch user-created marketplace listings (if RLS allows)
+    let userListings = [];
+    try {
+      const { data: mlData } = await supabase
+        .from('marketplace_listings')
+        .select('name, external_url, price, created_at')
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (mlData && mlData.length > 0) {
+        userListings = mlData
+          .filter(row => !!row.name) // must have a name to search by
+          .map(row => ({
+            // shape compatible with Fuse search keys
+            id: `ml-${row.created_at}-${row.external_url}`,
+            title: row.name || 'User Listing',
+            artist: '',
+            genre: null,
+            imageUrl: null,
+            releaseYear: null,
+            // external URL and pricing
+            externalUrl: row.external_url || null,
+            price: row.price || null,
+            currency: 'USD',
+            // mark as user listing
+            isUserListing: true,
+          }));
+      }
+    } catch (e) {
+      // Ignore errors fetching marketplace listings (likely due to RLS)
+    }
+
     // Configure Fuse.js for fuzzy search
     const fuseOptions = {
       keys: [
@@ -259,8 +290,26 @@ export async function searchReleases(searchTerm, limit = 20) {
       shouldSort: true, // Sort results by score
     };
 
-    // Create Fuse instance and search
-    const fuse = new Fuse(data, fuseOptions);
+    // Transform release rows first
+    const baseTransformed = data;
+
+    // Create combined array: transformed releases → enrich after Fuse result, plus user listings already shaped
+    const combinedForSearch = [
+      ...baseTransformed.map(r => ({
+        id: r.r_id,
+        title: r.title,
+        artist: r.artist,
+      })),
+      ...userListings.map(u => ({
+        id: u.id,
+        title: u.title,
+        artist: u.artist,
+        isUserListing: true,
+      })),
+    ];
+
+    // Create Fuse instance and search across combined set
+    const fuse = new Fuse(combinedForSearch, fuseOptions);
     const searchResults = fuse.search(searchTerm);
 
     // Get top results (limited by limit parameter)
@@ -272,54 +321,60 @@ export async function searchReleases(searchTerm, limit = 20) {
       return { data: [], error: null };
     }
 
-    // Fetch identifiers and marketplace data separately for matched results
-    const releasesWithData = await Promise.all(
-      topResults.map(async (release) => {
+    // For each top item:
+    // - if user listing, we already have full shape in userListings; find and return it
+    // - else it's a release: fetch identifiers and marketplace data and transform
+    const transformedData = await Promise.all(
+      topResults.map(async (item) => {
+        if (item.isUserListing) {
+          // find pre-shaped user listing
+          const found = userListings.find(u => u.id === item.id);
+          return found || null;
+        }
+        // else treat as normal release by r_id
+        const r_id = item.id;
+        const { data: full } = await supabase
+          .from('releases')
+          .select('r_id, title, artist, genre, image, price, release_year')
+          .eq('r_id', r_id)
+          .single();
+        if (!full) return null;
+        // Attach identifier/listing like earlier path
         let identifier = null;
         let listing = null;
-
         try {
           const { data: identifiers } = await supabase
             .from('release_identifiers')
             .select('external_url, external_id, source, metadata')
-            .eq('r_id', release.r_id)
+            .eq('r_id', r_id)
             .eq('source', 'discogs')
             .limit(1)
             .maybeSingle();
-          
           identifier = identifiers;
-        } catch (err) {
-          // Ignore errors fetching identifiers
-        }
-
+        } catch {}
         try {
           const { data: marketplaceData } = await supabase
             .from('marketplace_listings')
             .select('price, currency, is_available, quantity')
-            .eq('r_id', release.r_id)
+            .eq('r_id', r_id)
             .limit(1)
             .maybeSingle();
-          
           listing = marketplaceData;
-        } catch (err) {
-          // Ignore errors fetching marketplace data
-        }
-
-        return {
-          ...release,
+        } catch {}
+        const combined = {
+          ...full,
           release_identifiers: identifier ? [identifier] : [],
-          marketplace_listings: listing ? [listing] : []
+          marketplace_listings: listing ? [listing] : [],
         };
+        return transformReleaseData(combined);
       })
     );
-
-    const transformedData = releasesWithData.map(release => transformReleaseData(release));
     
     // Deduplicate by title and artist (case-insensitive)
     const uniqueResults = [];
     const seen = new Set();
     
-    transformedData.forEach(vinyl => {
+    transformedData.filter(Boolean).forEach(vinyl => {
       const key = `${vinyl.title?.toLowerCase().trim()}_${vinyl.artist?.toLowerCase().trim()}`;
       if (!seen.has(key)) {
         seen.add(key);

@@ -1,6 +1,14 @@
 import { supabase } from './supabase';
 
 /**
+ * Get current authenticated user's id (auth.users.id)
+ */
+export async function getCurrentUserId() {
+  const { data } = await supabase.auth.getUser();
+  return data?.user?.id || null;
+}
+
+/**
  * Hash password (simple version - in production, use bcrypt or similar)
  * Note: For now, we'll still use Supabase Auth for password hashing,
  * but store user data in our users table
@@ -276,5 +284,123 @@ export async function getCurrentUserProfile() {
     console.error('Error in getCurrentUserProfile:', err);
     return { data: null, error: err };
   }
+}
+
+/**
+ * FAVORITES
+ */
+export async function isFavorite(r_id) {
+  const userId = await getCurrentUserId();
+  if (!userId) return false;
+  const { data, error } = await supabase
+    .from('favorites')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('r_id', r_id)
+    .maybeSingle();
+  if (error) {
+    console.warn('isFavorite error:', error.message);
+    return false;
+  }
+  console.log('isFavorite result:', !!data);
+  return !!data;
+}
+
+export async function addToFavorites(r_id) {
+  const userId = await getCurrentUserId();
+  if (!userId) return { data: null, error: { message: 'Not authenticated' } };
+  // Avoid duplicate
+  const already = await isFavorite(r_id);
+  if (already) return { data: { ok: true, already: true }, error: null };
+  const { data, error } = await supabase
+    .from('favorites')
+    .insert({ user_id: userId, r_id })
+    .select()
+    .single();
+  if (error) {
+    console.error('addToFavorites error:', error.message, error);
+  } else {
+    console.log('addToFavorites success:', data);
+  }
+  return { data, error };
+}
+
+export async function removeFromFavorites(r_id) {
+  const userId = await getCurrentUserId();
+  if (!userId) return { data: null, error: { message: 'Not authenticated' } };
+  const { data, error } = await supabase
+    .from('favorites')
+    .delete()
+    .eq('user_id', userId)
+    .eq('r_id', r_id)
+    .select();
+  if (error) {
+    console.error('removeFromFavorites error:', error.message, error);
+  } else {
+    console.log('removeFromFavorites success for r_id:', r_id);
+  }
+  return { data, error };
+}
+
+export async function getUserFavorites() {
+  const userId = await getCurrentUserId();
+  if (!userId) return { data: [], error: null };
+  const { data, error } = await supabase
+    .from('favorites')
+    .select('r_id, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('getUserFavorites error:', error.message, error);
+  } else {
+    console.log(`Loaded ${data?.length || 0} favorites`);
+  }
+  return { data: data || [], error };
+}
+
+/**
+ * LISTINGS via marketplace_listings
+ * Using accessible fields: external_url, price, condition, created_at
+ */
+export async function getUserListings() {
+  const userId = await getCurrentUserId();
+  if (!userId) return { data: [], error: null };
+  const { data, error } = await supabase
+    .from('marketplace_listings')
+    .select('name, external_url, price, condition, created_at, user_id')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  return { data: data || [], error };
+}
+
+export async function createListing({ name, external_url, price, condition }) {
+  const userId = await getCurrentUserId();
+  if (!userId) return { data: null, error: { message: 'Not authenticated' } };
+  const payload = {
+    user_id: userId,
+    name: (name || '').trim(),
+    price: price !== undefined && price !== null ? Number(price) : null,
+    external_url: (external_url || '').trim(),
+    condition: (condition || '').trim(),
+  };
+  const { data, error } = await supabase
+    .from('marketplace_listings')
+    .insert(payload)
+    .select()
+    .single();
+  return { data, error };
+}
+
+export async function deleteListingByKey({ external_url, created_at }) {
+  const userId = await getCurrentUserId();
+  if (!userId) return { data: null, error: { message: 'Not authenticated' } };
+  const { data, error } = await supabase
+    .from('marketplace_listings')
+    .delete()
+    .eq('user_id', userId)
+    .eq('external_url', external_url)
+    .eq('created_at', created_at)
+    .select();
+  return { data, error };
 }
 

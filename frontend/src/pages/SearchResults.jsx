@@ -82,7 +82,11 @@ function SearchResults() {
           </div>
           <div className="nav-right">
             {user ? (
-              <Link to="/account" className="btn-sign-up">Account</Link>
+              <>
+                <Link to="/listings" className="btn-sign-in">Listings</Link>
+                <Link to="/favorites" className="btn-sign-in">Favorites</Link>
+                <Link to="/account" className="btn-sign-up">Account</Link>
+              </>
             ) : (
               <>
                 <Link to="/signin" className="btn-sign-in">Sign In</Link>
@@ -151,7 +155,13 @@ function SearchResults() {
                 <div 
                   key={vinyl.id} 
                   className="vinyl-card"
-                  onClick={() => navigate(`/vinyl/${vinyl.id}`)}
+                  onClick={() => {
+                    if (vinyl.isUserListing && vinyl.externalUrl) {
+                      window.open(vinyl.externalUrl, '_blank');
+                    } else {
+                      navigate(`/vinyl/${vinyl.id}`);
+                    }
+                  }}
                   style={{ cursor: 'pointer' }}
                 >
                   <div className="vinyl-image">
@@ -172,7 +182,7 @@ function SearchResults() {
                   {vinyl.releaseYear && (
                     <p className="vinyl-year">{vinyl.releaseYear}</p>
                   )}
-                  <div className="vinyl-link" onClick={(e) => e.stopPropagation()}>
+                    <div className="vinyl-link" onClick={(e) => e.stopPropagation()}>
                       {vinyl.externalUrl ? (
                         <a 
                           href={vinyl.externalUrl} 
@@ -180,7 +190,7 @@ function SearchResults() {
                           rel="noopener noreferrer"
                           className="vinyl-link-button"
                         >
-                          View on Discogs
+                          {vinyl.isUserListing ? 'View Listing' : 'View on Discogs'}
                         </a>
                       ) : (
                         <span className="vinyl-link-disabled">No listing available</span>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { fetchReleaseById } from '../utils/discogsData';
+import { addToFavorites, removeFromFavorites, isFavorite } from '../utils/userService';
 import './VinylDetail.css';
 
 function VinylDetail() {
@@ -11,6 +12,8 @@ function VinylDetail() {
   const [vinyl, setVinyl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [favorited, setFavorited] = useState(false);
 
   useEffect(() => {
     const fetchVinyl = async () => {
@@ -48,6 +51,35 @@ function VinylDetail() {
     fetchVinyl();
   }, [id]);
 
+  useEffect(() => {
+    const checkFavorite = async () => {
+      if (!user || !id) return;
+      const fav = await isFavorite(parseInt(id));
+      setFavorited(!!fav);
+    };
+    checkFavorite();
+  }, [user, id]);
+
+  const handleToggleFavorite = async () => {
+    if (!user) {
+      navigate('/signin');
+      return;
+    }
+    if (!id) return;
+    setFavoriteLoading(true);
+    try {
+      if (favorited) {
+        const { error } = await removeFromFavorites(parseInt(id));
+        if (!error) setFavorited(false);
+      } else {
+        const { error } = await addToFavorites(parseInt(id));
+        if (!error) setFavorited(true);
+      }
+    } finally {
+      setFavoriteLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="vinyl-detail-page">
@@ -60,7 +92,10 @@ function VinylDetail() {
             </div>
             <div className="nav-right">
               {user ? (
-                <Link to="/account" className="btn-sign-up">Account</Link>
+                <>
+                  <Link to="/favorites" className="btn-sign-in">Favorites</Link>
+                  <Link to="/account" className="btn-sign-up">Account</Link>
+                </>
               ) : (
                 <>
                   <Link to="/signin" className="btn-sign-in">Sign In</Link>
@@ -91,7 +126,10 @@ function VinylDetail() {
             </div>
             <div className="nav-right">
               {user ? (
-                <Link to="/account" className="btn-sign-up">Account</Link>
+                <>
+                  <Link to="/favorites" className="btn-sign-in">Favorites</Link>
+                  <Link to="/account" className="btn-sign-up">Account</Link>
+                </>
               ) : (
                 <>
                   <Link to="/signin" className="btn-sign-in">Sign In</Link>
@@ -122,7 +160,11 @@ function VinylDetail() {
           </div>
           <div className="nav-right">
             {user ? (
-              <Link to="/account" className="btn-sign-up">Account</Link>
+              <>
+                <Link to="/listings" className="btn-sign-in">Listings</Link>
+                <Link to="/favorites" className="btn-sign-in">Favorites</Link>
+                <Link to="/account" className="btn-sign-up">Account</Link>
+              </>
             ) : (
               <>
                 <Link to="/signin" className="btn-sign-in">Sign In</Link>
@@ -167,6 +209,19 @@ function VinylDetail() {
                 </a>
               </div>
             )}
+
+            <div className="detail-actions-top favorite-actions">
+              <button
+                className={`favorite-button ${favorited ? 'favorited' : ''}`}
+                onClick={handleToggleFavorite}
+                disabled={favoriteLoading}
+                aria-label={favorited ? 'Remove from favorites' : 'Add to favorites'}
+                title={favorited ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                <span className="star-icon">{favorited ? '★' : '☆'}</span>
+                <span className="favorite-text">{favorited ? 'Favorited' : 'Add to Favorites'}</span>
+              </button>
+            </div>
 
             <div className="detail-section">
               <h3 className="section-heading">Release Information</h3>
